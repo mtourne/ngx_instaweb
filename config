@@ -1,0 +1,154 @@
+#!/bin/sh
+#
+# Copyright (c) 2010, 2011 CloudFlare, Inc. (http://www.cloudflare.com)
+# Copyright (c) 2010, 2011 Matthieu Tourne <matthieu.tourne@gmail.com>
+#
+# @author Matthieu Tourne <matthieu@cloudflare.com>
+#
+
+ngx_addon_name=ngx_http_instaweb_module
+
+HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_instaweb_module"
+
+PAGESPEED_ROOT="$HOME/mod_pagespeed"
+
+PAGESPEED_BUILDMODE="Release"
+
+PAGESPEED_INCS="\
+  $PAGESPEED_ROOT/src/
+  $PAGESPEED_ROOT/src/third_party/base64 \
+  $PAGESPEED_ROOT/src/third_party/chromium/src \
+  $PAGESPEED_ROOT/src/third_party/google-sparsehash/src \
+  $PAGESPEED_ROOT/src/third_party/google-sparsehash/gen/arch/linux/x64/include \
+  $PAGESPEED_ROOT/src/third_party/libpagespeed/src \
+  $PAGESPEED_ROOT/src/third_party/protobuf/ \
+  $PAGESPEED_ROOT/src/third_party/protobuf/src/ \
+  "
+
+PAGESPEED_SRCS="\
+  $PAGESPEED_ROOT/src/net/instaweb/htmlparse \
+  $PAGESPEED_ROOT/src/third_party/chromium \
+  $PAGESPEED_ROOT/src/third_party/google-sparsehash \
+  "
+
+CFLAGS=`echo $CFLAGS | sed -e 's/-Werror//'`
+echo "CFLAGS: $CFLAGS"
+
+test_output() {
+   if [ $1 -ne "0" ]; then
+      exit 1
+   fi
+}
+
+CORE_INCS="$CORE_INCS \
+  $ngx_addon_dir/libs \
+  $PAGESPEED_INCS \
+  "
+#  $ngx_addon_dir/libs \
+
+# create protoc output dirs
+
+CURDIR=`pwd`
+
+PROTOC_BIN="$PAGESPEED_ROOT/src/out/$PAGESPEED_BUILDMODE/protoc"
+
+cd $PAGESPEED_ROOT/src/net/instaweb && \
+    $PROTOC_BIN --proto_path="../.." \
+    "../../net/instaweb/http/http.proto" \
+    --cpp_out="$ngx_addon_dir/libs/"
+
+test_output $?
+
+cd $PAGESPEED_ROOT/src/net/instaweb && \
+    $PROTOC_BIN --proto_path="../.." \
+    "../../net/instaweb/rewriter/cached_result.proto" \
+    --cpp_out="$ngx_addon_dir/libs/"
+
+test_output $?
+
+cd $PAGESPEED_ROOT/src/net/instaweb && \
+    $PROTOC_BIN --proto_path="../.." \
+    "../../net/instaweb/spriter/public/image_spriter.proto" \
+    --cpp_out="$ngx_addon_dir/libs/"
+
+test_output $?
+
+cd $CURDIR
+
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS \
+  $ngx_addon_dir/ngx_http_instaweb_module.h \
+  $ngx_addon_dir/ngx_message_handler.h \
+  $ngx_addon_dir/libs/net/instaweb/http/http.pb.h \
+  $ngx_addon_dir/libs/net/instaweb/rewriter/cached_result.pb.h \
+  $ngx_addon_dir/libs/net/instaweb/spriter/public/image_spriter.pb.h \
+  "
+
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
+	$ngx_addon_dir/ngx_http_instaweb_module.cpp \
+        $ngx_addon_dir/ngx_message_handler.cpp \
+        $ngx_addon_dir/libs/net/instaweb/http/http.pb.cc \
+        $ngx_addon_dir/libs/net/instaweb/rewriter/cached_result.pb.cc
+        $ngx_addon_dir/libs/net/instaweb/spriter/public/image_spriter.pb.cc \
+        "
+
+
+CORE_LIBS="$CORE_LIBS -lstdc++ -Wl,-z,noexecstack -lrt"
+
+#for lib in `find $PAGESPEED_ROOT/src/out -iname '*.a'`; do
+#    CORE_LIBS="$CORE_LIBS $lib"
+#done
+
+# mod_pagespeed/src/net/instaweb/mod_pagespeed.target.mk
+LIB_LOCATION="$PAGESPEED_ROOT/src/out/$PAGESPEED_BUILDMODE/obj.target"
+
+CORE_LIBS="$CORE_LIBS \
+        $LIB_LOCATION/net/instaweb/libapache.a \
+        $LIB_LOCATION/base/libbase.a \
+        $LIB_LOCATION/third_party/gflags/libgflags.a \
+        $LIB_LOCATION/third_party/serf/libserf.a \
+        $LIB_LOCATION/third_party/zlib/libchrome_zlib.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_htmlparse.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_htmlparse_core.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_util_core.a \
+        $LIB_LOCATION/third_party/protobuf/libprotobuf_lite.a \
+        $LIB_LOCATION/build/temp_gyp/libgoogleurl.a \
+        $LIB_LOCATION/third_party/icu/libicuuc.a \
+        $LIB_LOCATION/third_party/icu/libicudata.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_util.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_http.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_http_pb.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/core/libpagespeed_core.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/proto/libpagespeed_output_pb.a \
+        $LIB_LOCATION/third_party/base64/libbase64.a \
+        $LIB_LOCATION/third_party/chromium/src/net/tools/liburl_to_filename_encoder.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_base.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_pb.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_html.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_css.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_spriter.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_spriter_pb.a \
+        $LIB_LOCATION/third_party/libpng/libpng.a \
+        $LIB_LOCATION/third_party/css_parser/libcss_parser.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_image.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_jpeg_optimizer.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_jpeg_reader.a \
+        $LIB_LOCATION/third_party/libjpeg/libjpeg.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/third_party/libjpeg_trans/libjpeg_trans.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_png_optimizer.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/third_party/giflib/libdgiflib.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/third_party/giflib/libgiflib_core.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/third_party/optipng/libopngreduc.a \
+        $LIB_LOCATION/third_party/opencv/libhighgui.a \
+        $LIB_LOCATION/third_party/opencv/libcv.a \
+        $LIB_LOCATION/third_party/opencv/libcxcore.a \
+        $LIB_LOCATION/third_party/opencv/libflann.a \
+        $LIB_LOCATION/third_party/opencv/liblapack.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_javascript.a \
+        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/jsminify/libpagespeed_jsminify.a \
+        $LIB_LOCATION/net/instaweb/libinstaweb_util_pthread.a \
+        "
+
+
+echo "libs included:"
+echo $CORE_LIBS

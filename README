@@ -1,0 +1,46 @@
+ngx_instaweb module
+-------------------
+
+This module is a very experimental port of Google's mod_pagespeed for Apache
+to NGINX
+
+Right now it compiles and uses a test filter called
+AttrValuesSaverFilter, which saves all the tag attributes
+found in the html code
+
+
+INSTALLATION
+------------
+
+1. Download and Compile mod_pagespeed :
+
+http://code.google.com/p/modpagespeed/wiki/HowToBuild
+
+The config script for this module expects to find mod_pagespeed
+in $HOME and mod_pagespeed built in Release mode
+
+If this is not the case, change PAGESPEED_ROOT and PAGESPEED_BUILDMODE
+in ngx_instaweb/config
+
+
+2. Build NGINX with ngx_instaweb module
+
+   cd nginx
+   ./configure --add-module=/path/to/ngx_instaweb/ --with-debug
+
+   make && make install
+
+
+USAGE
+-----
+The only directive provided is
+instaweb <on/off>
+
+you can tail the http_debug log to see the AttrValuesSaverFilter in action.
+
+
+COPYRIGHT
+--------
+
+Copyright (c) 2010, 2011 CloudFlare, Inc. (http://www.cloudflare.com)
+Copyright (c) 2010, 2011 Matthieu Tourne <matthieu.tourne@gmail.com>
