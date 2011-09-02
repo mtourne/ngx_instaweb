@@ -139,8 +139,13 @@ ngx_http_instaweb_header_filter(ngx_http_request_t *r) {
 
     message_handler = new NgxMessageHandler(r->connection->log);
     html_parser = new HtmlParse(message_handler);
+#if (NGX_HTTP_SSL)
     len = ngx_snprintf(full_uri, 512, "%s://%V/%V", (r->connection->ssl) ? "https" : "http",
                        &r->headers_in.server, &r->unparsed_uri) - full_uri;
+#else
+    len = ngx_snprintf(full_uri, 512, "http://%V/%V",
+                       &r->headers_in.server, &r->unparsed_uri) - full_uri;
+#endif
     if (!html_parser->StartParse(StringPiece((const char*) full_uri,
                                              len))) {
         return ngx_http_next_header_filter(r);

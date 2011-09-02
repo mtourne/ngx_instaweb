@@ -101,54 +101,11 @@ CORE_LIBS="$CORE_LIBS -lstdc++ -Wl,-z,noexecstack -lrt"
 # mod_pagespeed/src/net/instaweb/mod_pagespeed.target.mk
 LIB_LOCATION="$PAGESPEED_ROOT/src/out/$PAGESPEED_BUILDMODE/obj.target"
 
-CORE_LIBS="$CORE_LIBS \
-        $LIB_LOCATION/net/instaweb/libapache.a \
-        $LIB_LOCATION/base/libbase.a \
-        $LIB_LOCATION/third_party/gflags/libgflags.a \
-        $LIB_LOCATION/third_party/serf/libserf.a \
-        $LIB_LOCATION/third_party/zlib/libchrome_zlib.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_htmlparse.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_htmlparse_core.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_util_core.a \
-        $LIB_LOCATION/third_party/protobuf/libprotobuf_lite.a \
-        $LIB_LOCATION/build/temp_gyp/libgoogleurl.a \
-        $LIB_LOCATION/third_party/icu/libicuuc.a \
-        $LIB_LOCATION/third_party/icu/libicudata.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_util.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_http.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_http_pb.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/core/libpagespeed_core.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/proto/libpagespeed_output_pb.a \
-        $LIB_LOCATION/third_party/base64/libbase64.a \
-        $LIB_LOCATION/third_party/chromium/src/net/tools/liburl_to_filename_encoder.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_base.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_pb.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_html.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_css.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_spriter.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_spriter_pb.a \
-        $LIB_LOCATION/third_party/libpng/libpng.a \
-        $LIB_LOCATION/third_party/css_parser/libcss_parser.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_image.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_jpeg_optimizer.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_jpeg_reader.a \
-        $LIB_LOCATION/third_party/libjpeg/libjpeg.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/third_party/libjpeg_trans/libjpeg_trans.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/image_compression/libpagespeed_png_optimizer.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/third_party/giflib/libdgiflib.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/third_party/giflib/libgiflib_core.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/third_party/optipng/libopngreduc.a \
-        $LIB_LOCATION/third_party/opencv/libhighgui.a \
-        $LIB_LOCATION/third_party/opencv/libcv.a \
-        $LIB_LOCATION/third_party/opencv/libcxcore.a \
-        $LIB_LOCATION/third_party/opencv/libflann.a \
-        $LIB_LOCATION/third_party/opencv/liblapack.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_rewriter_javascript.a \
-        $LIB_LOCATION/third_party/libpagespeed/src/pagespeed/jsminify/libpagespeed_jsminify.a \
-        $LIB_LOCATION/net/instaweb/libinstaweb_util_pthread.a \
-        "
+PWD=$ngx_addon_dir/libs make -C $PAGESPEED_ROOT/src/net/instaweb/automatic exe
 
+CORE_LIBS="$CORE_LIBS \
+  $ngx_addon_dir/libs/pagespeed_automatic.a
+  "
 
 echo "libs included:"
 echo $CORE_LIBS
