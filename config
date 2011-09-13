@@ -12,7 +12,7 @@ HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_instaweb_module"
 
 PAGESPEED_ROOT="$HOME/mod_pagespeed"
 
-PAGESPEED_BUILDMODE="Release"
+PAGESPEED_BUILDMODE="Debug"
 
 PAGESPEED_INCS="\
   $PAGESPEED_ROOT/src/
@@ -94,14 +94,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
 
 CORE_LIBS="$CORE_LIBS -lstdc++ -Wl,-z,noexecstack -lrt"
 
-#for lib in `find $PAGESPEED_ROOT/src/out -iname '*.a'`; do
-#    CORE_LIBS="$CORE_LIBS $lib"
-#done
-
-# mod_pagespeed/src/net/instaweb/mod_pagespeed.target.mk
-LIB_LOCATION="$PAGESPEED_ROOT/src/out/$PAGESPEED_BUILDMODE/obj.target"
-
-PWD=$ngx_addon_dir/libs make -C $PAGESPEED_ROOT/src/net/instaweb/automatic exe
+PWD=$ngx_addon_dir/libs make BUILDTYPE=$PAGESPEED_BUILDMODE -C $PAGESPEED_ROOT/src/net/instaweb/automatic exe
 
 CORE_LIBS="$CORE_LIBS \
   $ngx_addon_dir/libs/pagespeed_automatic.a
