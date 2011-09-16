@@ -10,7 +10,7 @@ ngx_addon_name=ngx_http_instaweb_module
 
 HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_instaweb_module"
 
-PAGESPEED_ROOT="$HOME/mod_pagespeed"
+PAGESPEED_ROOT="/mnt/hgfs/vm_share/tmp/pagespeed/mod_pagespeed"
 
 PAGESPEED_BUILDMODE="Debug"
 
@@ -81,6 +81,9 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS \
   $ngx_addon_dir/libs/net/instaweb/http/http.pb.h \
   $ngx_addon_dir/libs/net/instaweb/rewriter/cached_result.pb.h \
   $ngx_addon_dir/libs/net/instaweb/spriter/public/image_spriter.pb.h \
+  $ngx_addon_dir/ngx_http_instaweb_filter.h \
+  $ngx_addon_dir/ngx_filter_driver.h \
+  $ngx_addon_dir/ngx_pagespeed_writer.h \
   "
 
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
@@ -89,6 +92,9 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
         $ngx_addon_dir/libs/net/instaweb/http/http.pb.cc \
         $ngx_addon_dir/libs/net/instaweb/rewriter/cached_result.pb.cc
         $ngx_addon_dir/libs/net/instaweb/spriter/public/image_spriter.pb.cc \
+	$ngx_addon_dir/ngx_http_instaweb_filter.cpp \
+	$ngx_addon_dir/ngx_filter_driver.cpp \
+	$ngx_addon_dir/ngx_pagespeed_writer.cpp \
         "
 
 
