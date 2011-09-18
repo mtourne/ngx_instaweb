@@ -24,7 +24,6 @@ NgxPagespeedWriter::NgxPagespeedWriter(ngx_http_request_t *request, ngx_http_out
         request(request),
         ngx_http_next_body_filter(ngx_http_next_body_filter),
         ctx(ctx) {
-    ctx->out_head = ctx->out_tail = NULL;
     write_status = NGX_OK;
 }
 
@@ -32,45 +31,53 @@ NgxPagespeedWriter::~NgxPagespeedWriter() {
 }
 
 bool NgxPagespeedWriter::Write(const StringPiece& str, MessageHandler* handler) {
-  char* data;
-  ngx_buf_t    *b;
-  ngx_chain_t   *added_link;
+    const char  *cdata;
+    ngx_chain_t *cl;
+    size_t      bytes_remaining;
+    size_t      write_size;
 
-  data = (char *)ngx_pcalloc(request->pool, str.size());
-  if (data == NULL) {
-    ngx_log_error(NGX_LOG_ERR, request->connection->log, 0, "NgxPagespeedWriter::Write Failed to allocate response buffer.");
-    return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  }
-  memcpy(data, str.data(), str.size());
+    cdata = str.data();
+    bytes_remaining = str.size();
 
-  b = (ngx_buf_t *)ngx_pcalloc(request->pool, sizeof(ngx_buf_t));
-  if (b == NULL) {
-    ngx_log_error(NGX_LOG_ERR, request->connection->log, 0, "NgxPagespeedWriter::Write Failed to allocate response buffer holder.");
-    return NGX_HTTP_INTERNAL_SERVER_ERROR;
-  }
+    while (bytes_remaining) {
 
-  b->pos = b->start = (u_char *)str.data();
-  b->last = b->end = b->start + str.size();
+        if (ctx->out_buf == NULL
+            || !ctx->out_buf->temporary // mtourne: why ?
+            || ctx->out_buf->last >= ctx->out_buf->end) {
+            if (ctx->free) {
+                cl = ctx->free;
+                ctx->free = ctx->free->next;
+                ctx->out_buf = cl->buf;
+            } else {
+                ctx->out_buf = ngx_create_temp_buf(request->pool, ngx_pagesize);
+                if (ctx->out_buf == NULL) {
+                    // TODO (mtourne): log
+                    return false;
+                }
 
-  added_link = ngx_alloc_chain_link(request->pool);
-  if (added_link == NULL) {
-      return NGX_ERROR;
-  }
+                cl = ngx_alloc_chain_link(request->pool);
+                if (cl == NULL) {
+                    return false;
+                }
 
-  added_link->buf = b;
-  added_link->next = NULL;
+                ctx->out_buf->tag = (ngx_buf_tag_t) &ngx_http_instaweb_module;
+                cl->buf = ctx->out_buf;
+            }
+            cl->next = NULL;
+            *ctx->last_out = cl;
+            ctx->last_out = &cl->next;
+        }
+        write_size = ctx->out_buf->end - ctx->out_buf->last;
+        if (write_size > bytes_remaining) {
+            write_size = bytes_remaining;
+        }
+        ngx_memcpy(ctx->out_buf->last, cdata, write_size);
+        cdata += write_size;
+        ctx->out_buf->last += write_size;
+        bytes_remaining -= write_size;
+    }
 
-  // if this is the first element on output, setup the head pointer
-  if(ctx->out_head == NULL) {
-      ctx->out_head = ctx->out_tail = added_link;
-  } else {
-      ctx->out_tail->next = added_link;
-      ctx->out_tail->buf->last_in_chain = 0;
-      ctx->out_tail = added_link;
-  }
-  ctx->out_tail->buf->last_in_chain = 1; // mark last in chain as such
-
-  return true;
+    return true;
 }
 
 

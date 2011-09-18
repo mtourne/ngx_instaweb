@@ -35,6 +35,9 @@ static ngx_int_t ngx_http_instaweb_header_filter(ngx_http_request_t *r);
 static ngx_int_t ngx_http_instaweb_body_filter(ngx_http_request_t *r,
                                                ngx_chain_t *in);
 
+static ngx_int_t ngx_http_instaweb_output(ngx_http_request_t *r,
+                                          ngx_http_instaweb_ctx_t *ctx);
+
 static void *ngx_http_instaweb_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_instaweb_merge_loc_conf(ngx_conf_t *cf,
                                               void *parent, void *child);
@@ -99,21 +102,24 @@ ngx_http_instaweb_header_filter(ngx_http_request_t *r) {
         return ngx_http_next_header_filter(r);
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "instaweb header filter");
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "instaweb header filter");
 
 #if (NGX_HTTP_SSL)
-    len = ngx_snprintf(full_uri, 512, "%s://%V/%V", (r->connection->ssl) ? "https" : "http",
+    len = ngx_snprintf(full_uri, 512, "%s://%V/%V", (r->connection->ssl) ?
+                       "https" : "http",
                        &r->headers_in.server, &r->unparsed_uri) - full_uri;
 #else
     len = ngx_snprintf(full_uri, 512, "http://%V/%V",
                        &r->headers_in.server, &r->unparsed_uri) - full_uri;
 #endif
 
-
-    ctx = (ngx_http_instaweb_ctx_t*) ngx_pcalloc(r->pool, sizeof(ngx_http_instaweb_ctx_t));
+    ctx = (ngx_http_instaweb_ctx_t*) ngx_pcalloc(
+        r->pool, sizeof(ngx_http_instaweb_ctx_t));
     if (ctx == NULL) {
-        return NGX_ERROR;
+	return NGX_ERROR;
     }
+    ctx->last_out = &ctx->out;
 
     ctx->writer = new NgxPagespeedWriter(r, ngx_http_next_body_filter, ctx);
     driver = new FilterDriver(new NgxMessageHandler(r->connection->log), ctx->writer);
@@ -124,8 +130,10 @@ ngx_http_instaweb_header_filter(ngx_http_request_t *r) {
 
     ngx_http_set_ctx(r, ctx, ngx_http_instaweb_module);
 
-    // clear content length & modified data.
-    // rbejjani - why?
+    /* loads the content of the response in : in->buf */
+    r->filter_need_in_memory = 1;
+
+    /* clear content length */
     if (r == r->main) {
         ngx_http_clear_content_length(r);
         ngx_http_clear_last_modified(r);
@@ -139,41 +147,166 @@ ngx_http_instaweb_header_filter(ngx_http_request_t *r) {
 static ngx_int_t
 ngx_http_instaweb_body_filter(ngx_http_request_t *r, ngx_chain_t *in) {
     ngx_http_instaweb_ctx_t     *ctx;
+    ngx_chain_t                 *cl;
+    ngx_buf_t                   *b = NULL;
 
-    // extract context
     ctx = (ngx_http_instaweb_ctx_t*) ngx_http_get_module_ctx(
         r, ngx_http_instaweb_module);
 
-    // exit early if we can't find context
     if (ctx == NULL) {
         return ngx_http_next_body_filter(r, in);
     }
 
-    // parse each new input
-    for(ngx_chain_t *current = in; current != NULL; current = in->next) {
-        ctx->driver->ParseText((const char*) current->buf->start, current->buf->end - current->buf->start);
+    if ((in == NULL
+         && ctx->buf == NULL
+         && ctx->in == NULL
+         && ctx->busy == NULL))
+    {
+        return ngx_http_next_body_filter(r, in);
+    }
 
-        // if last buffer, end parsing, inducing flush, which writes out chain to filters after us
-        if(current->buf->last_buf) {
-            // FinishParse will finalise any filters, output chain should be ready after it returns.
-            ctx->driver->FinishParse();
+    /* add the incoming chain to the chain ctx->in */
 
-            // set the last buffer to be the ngx last buffer
-            // TODO (rbejjani) make this more elegant, we can be flushed any time
-            ctx->out_tail->buf->last_buf = 1;
+    if (in) {
+        if (ngx_chain_add_copy(r->pool, &ctx->in, in) != NGX_OK) {
+            return NGX_ERROR;
         }
     }
-    // actually flush to next filter if we have outstanding output buffers
-    if(ctx->out_tail->buf->last_buf) {
-        // stash a pointer to use in output, clear out our local handles.
-        ngx_chain_t   *out_head = ctx->out_head;
-        ctx->out_head = ctx->out_tail = NULL;
 
-        return ngx_http_next_body_filter(r, out_head);
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http instaweb filter \"%V\"", &r->uri);
+
+    while (ctx->in || ctx->buf) {
+
+        if (ctx->buf == NULL ){
+            ctx->buf = ctx->in->buf;
+            ctx->in = ctx->in->next;
+            ctx->pos = ctx->buf->pos;
+        }
+
+        while (ctx->pos < ctx->buf->last) {
+            // do stuff
+            ctx->driver->ParseText((const char*) ctx->pos,
+                                   ctx->buf->last - ctx->pos);
+            ctx->pos = ctx->buf->last;
+        }
+
+
+        if (ctx->buf->last_buf) {
+            ctx->driver->FinishParse();
+        }
+
+        if (ctx->buf->last_buf || ngx_buf_in_memory(ctx->buf)) {
+            if (b == NULL) {
+                if (ctx->free) {
+                    cl = ctx->free;
+                    ctx->free = ctx->free->next;
+                    b = cl->buf;
+                    ngx_memzero(b, sizeof(ngx_buf_t));
+
+                } else {
+                    b = (ngx_buf_t*) ngx_calloc_buf(r->pool);
+                    if (b == NULL) {
+                        return NGX_ERROR;
+                    }
+
+                    cl = ngx_alloc_chain_link(r->pool);
+                    if (cl == NULL) {
+                        return NGX_ERROR;
+                    }
+
+                    cl->buf = b;
+                }
+
+                b->sync = 1;
+
+                cl->next = NULL;
+                *ctx->last_out = cl;
+                ctx->last_out = &cl->next;
+            }
+
+            b->last_buf = ctx->buf->last_buf;
+            b->shadow = ctx->buf;
+
+            b->recycled = ctx->buf->recycled;
+        }
+
+        ctx->buf = NULL;
     }
 
+    if (ctx->out == NULL && ctx->busy == NULL) {
+        return NGX_OK;
+    }
 
-    return NGX_OK;
+    return ngx_http_instaweb_output(r, ctx);
+}
+
+static ngx_int_t
+ngx_http_instaweb_output(ngx_http_request_t *r, ngx_http_instaweb_ctx_t *ctx)
+{
+    ngx_int_t     rc;
+    ngx_buf_t    *b;
+    ngx_chain_t  *cl;
+
+#if 1
+    b = NULL;
+    for (cl = ctx->out; cl; cl = cl->next) {
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "instaweb out: %p %p", cl->buf, cl->buf->pos);
+        if (cl->buf == b) {
+            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                          "the same buf was used in instaweb");
+            ngx_debug_point();
+            return NGX_ERROR;
+        }
+        b = cl->buf;
+    }
+#endif
+
+    rc = ngx_http_next_body_filter(r, ctx->out);
+
+    if (ctx->busy == NULL) {
+        ctx->busy = ctx->out;
+
+    } else {
+        for (cl = ctx->busy; cl->next; cl = cl->next) { /* void */ }
+        cl->next = ctx->out;
+    }
+
+    ctx->out = NULL;
+    ctx->last_out = &ctx->out;
+
+    while (ctx->busy) {
+
+        cl = ctx->busy;
+        b = cl->buf;
+
+        if (ngx_buf_size(b) != 0) {
+            break;
+        }
+
+        if (b->shadow) {
+            b->shadow->pos = b->shadow->last;
+        }
+
+        ctx->busy = cl->next;
+
+        if (ngx_buf_in_memory(b) || b->in_file) {
+            /* add data bufs only to the free buf chain */
+
+            cl->next = ctx->free;
+            ctx->free = cl;
+        }
+    }
+
+    if (ctx->in || ctx->buf) {
+        r->buffered |= NGX_HTTP_SUB_BUFFERED;
+
+    } else {
+        r->buffered &= ~NGX_HTTP_SUB_BUFFERED;
+    }
+
+    return rc;
 }
 
 static void*

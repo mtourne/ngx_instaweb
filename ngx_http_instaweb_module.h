@@ -21,19 +21,25 @@ class FilterDriver;
 class NgxPagespeedWriter;
 
 typedef struct {
-    /* IO */
+
     FilterDriver        *driver;
     NgxPagespeedWriter  *writer;
 
-    ngx_chain_t   *out_head; // output chain pointers, used by NgxPagespeedWriter
-    ngx_chain_t   *out_tail;
+    /* IO */
+    ngx_buf_t		*buf;
+    u_char		*pos;
+
+    ngx_buf_t           *out_buf;
 
     ngx_chain_t         *in;
     ngx_chain_t         *free;
     ngx_chain_t         *busy;
     ngx_chain_t         *out;
+    ngx_chain_t         **last_out;
 } ngx_http_instaweb_ctx_t;
 
 } //!namespace net_instaweb
+
+extern ngx_module_t ngx_http_instaweb_module;
 
 #endif /* !NGX_HTTP_INSTAWEB_MODULE_H_ */
