@@ -35,9 +35,6 @@ static ngx_int_t ngx_http_instaweb_header_filter(ngx_http_request_t *r);
 static ngx_int_t ngx_http_instaweb_body_filter(ngx_http_request_t *r,
                                                ngx_chain_t *in);
 
-static ngx_int_t ngx_http_instaweb_output(ngx_http_request_t *r,
-                                          ngx_http_instaweb_ctx_t *ctx);
-
 static void *ngx_http_instaweb_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_instaweb_merge_loc_conf(ngx_conf_t *cf,
                                               void *parent, void *child);
@@ -148,7 +145,7 @@ static ngx_int_t
 ngx_http_instaweb_body_filter(ngx_http_request_t *r, ngx_chain_t *in) {
     ngx_http_instaweb_ctx_t     *ctx;
     ngx_chain_t                 *cl;
-    ngx_buf_t                   *b = NULL;
+    ngx_int_t                   rc;
 
     ctx = (ngx_http_instaweb_ctx_t*) ngx_http_get_module_ctx(
         r, ngx_http_instaweb_module);
@@ -157,154 +154,40 @@ ngx_http_instaweb_body_filter(ngx_http_request_t *r, ngx_chain_t *in) {
         return ngx_http_next_body_filter(r, in);
     }
 
-    if ((in == NULL
-         && ctx->buf == NULL
-         && ctx->in == NULL
-         && ctx->busy == NULL))
-    {
-        return ngx_http_next_body_filter(r, in);
-    }
-
-    /* add the incoming chain to the chain ctx->in */
-
-    if (in) {
-        if (ngx_chain_add_copy(r->pool, &ctx->in, in) != NGX_OK) {
-            return NGX_ERROR;
-        }
-    }
-
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http instaweb filter \"%V\"", &r->uri);
 
-    while (ctx->in || ctx->buf) {
-
-        if (ctx->buf == NULL ){
-            ctx->buf = ctx->in->buf;
-            ctx->in = ctx->in->next;
-            ctx->pos = ctx->buf->pos;
-        }
-
-        while (ctx->pos < ctx->buf->last) {
-            // do stuff
-            ctx->driver->ParseText((const char*) ctx->pos,
-                                   ctx->buf->last - ctx->pos);
-            ctx->pos = ctx->buf->last;
-        }
+    while (in) {
+        ctx->driver->ParseText((const char*) in->buf->pos,
+                               in->buf->last - in->buf->pos);
 
 
-        if (ctx->buf->last_buf) {
+        if (in->buf->last_buf) {
             ctx->driver->FinishParse();
-        }
 
-        if (ctx->buf->last_buf || ngx_buf_in_memory(ctx->buf)) {
-            if (b == NULL) {
-                if (ctx->free) {
-                    cl = ctx->free;
-                    ctx->free = ctx->free->next;
-                    b = cl->buf;
-                    ngx_memzero(b, sizeof(ngx_buf_t));
-
-                } else {
-                    b = (ngx_buf_t*) ngx_calloc_buf(r->pool);
-                    if (b == NULL) {
-                        return NGX_ERROR;
-                    }
-
-                    cl = ngx_alloc_chain_link(r->pool);
-                    if (cl == NULL) {
-                        return NGX_ERROR;
-                    }
-
-                    cl->buf = b;
-                }
-
-                b->sync = 1;
-
-                cl->next = NULL;
-                *ctx->last_out = cl;
-                ctx->last_out = &cl->next;
+            cl = ngx_chain_get_free_buf(r->pool, &ctx->free);
+            if (cl == NULL) {
+                return NGX_ERROR;
             }
-
-            b->last_buf = ctx->buf->last_buf;
-            b->shadow = ctx->buf;
-
-            b->recycled = ctx->buf->recycled;
+            cl->buf->last_buf = 1;
+            *ctx->last_out = cl;
+            ctx->last_out = &cl->next;
         }
 
-        ctx->buf = NULL;
+        in = in->next;
     }
 
     if (ctx->out == NULL && ctx->busy == NULL) {
         return NGX_OK;
     }
 
-    return ngx_http_instaweb_output(r, ctx);
-}
-
-static ngx_int_t
-ngx_http_instaweb_output(ngx_http_request_t *r, ngx_http_instaweb_ctx_t *ctx)
-{
-    ngx_int_t     rc;
-    ngx_buf_t    *b;
-    ngx_chain_t  *cl;
-
-#if 1
-    b = NULL;
-    for (cl = ctx->out; cl; cl = cl->next) {
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "instaweb out: %p %p", cl->buf, cl->buf->pos);
-        if (cl->buf == b) {
-            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
-                          "the same buf was used in instaweb");
-            ngx_debug_point();
-            return NGX_ERROR;
-        }
-        b = cl->buf;
-    }
-#endif
-
     rc = ngx_http_next_body_filter(r, ctx->out);
 
-    if (ctx->busy == NULL) {
-        ctx->busy = ctx->out;
+    ngx_chain_update_chains(&ctx->free, &ctx->busy, &ctx->out,
+			  (ngx_buf_tag_t) &ngx_http_instaweb_module);
 
-    } else {
-        for (cl = ctx->busy; cl->next; cl = cl->next) { /* void */ }
-        cl->next = ctx->out;
-    }
-
-    ctx->out = NULL;
     ctx->last_out = &ctx->out;
-
-    while (ctx->busy) {
-
-        cl = ctx->busy;
-        b = cl->buf;
-
-        if (ngx_buf_size(b) != 0) {
-            break;
-        }
-
-        if (b->shadow) {
-            b->shadow->pos = b->shadow->last;
-        }
-
-        ctx->busy = cl->next;
-
-        if (ngx_buf_in_memory(b) || b->in_file) {
-            /* add data bufs only to the free buf chain */
-
-            cl->next = ctx->free;
-            ctx->free = cl;
-        }
-    }
-
-    if (ctx->in || ctx->buf) {
-        r->buffered |= NGX_HTTP_SUB_BUFFERED;
-
-    } else {
-        r->buffered &= ~NGX_HTTP_SUB_BUFFERED;
-    }
+    ctx->out_buf = NULL;
 
     return rc;
 }

@@ -26,16 +26,12 @@ typedef struct {
     NgxPagespeedWriter  *writer;
 
     /* IO */
-    ngx_buf_t		*buf;
-    u_char		*pos;
-
-    ngx_buf_t           *out_buf;
-
-    ngx_chain_t         *in;
     ngx_chain_t         *free;
     ngx_chain_t         *busy;
     ngx_chain_t         *out;
     ngx_chain_t         **last_out;
+
+    ngx_buf_t           *out_buf;
 } ngx_http_instaweb_ctx_t;
 
 } //!namespace net_instaweb
