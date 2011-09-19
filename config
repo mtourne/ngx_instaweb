@@ -10,7 +10,7 @@ ngx_addon_name=ngx_http_instaweb_module
 
 HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_instaweb_module"
 
-PAGESPEED_ROOT="$HOME/mod_pagespeed"
+PAGESPEED_ROOT=${PAGESPEED_ROOT:-"$HOME/mod_pagespeed"}
 
 PAGESPEED_BUILDMODE="Debug"
 
