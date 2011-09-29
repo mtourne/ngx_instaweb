@@ -100,14 +100,20 @@ FilterDriver::~FilterDriver() {
 }
 
 void FilterDriver::SetupFilters() {
+    // Add transform filters
+
+    // Remove comments in HTML
+    AddFilter(new RemoveCommentsFilter(this));
+
+    // Remove excess whitespace in HTML
+    AddFilter(new CollapseWhitespaceFilter(this));
+
+
+    // add output filters
     HtmlWriterFilter *out = new HtmlWriterFilter(this);
     // add writer filter. This writes it all out!
-    AddFilter(out);
     out->set_writer(writer);
-	// Remove comments in HTML
-	//AddFilter(new RemoveCommentsFilter(this));
-    // Remove excess whitespace in HTML
-	//AddFilter(new CollapseWhitespaceFilter(this));
+    AddFilter(out);
 }
 
 void FilterDriver::AddFilter(HtmlFilter* filter) {
