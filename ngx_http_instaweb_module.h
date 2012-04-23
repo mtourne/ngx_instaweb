@@ -26,6 +26,7 @@ typedef struct {
     NgxPagespeedWriter  *writer;
 
     /* IO */
+    ngx_chain_t         *in;
     ngx_chain_t         *free;
     ngx_chain_t         *busy;
     ngx_chain_t         *out;

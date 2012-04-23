@@ -5,24 +5,15 @@
  * @author Ray Bejjani<ray@cloudflare.com>
  */
 
-extern "C" {
-  #include <ngx_config.h>
-  #include <ngx_core.h>
-  #include <ngx_http.h>
-}
-
 #include "ngx_pagespeed_writer.h"
-
-#include "net/instaweb/util/public/string.h"
-#include "net/instaweb/util/public/string_util.h"
 
 namespace net_instaweb {
 
 class MessageHandler;
 
-NgxPagespeedWriter::NgxPagespeedWriter(ngx_http_request_t *request, ngx_http_output_body_filter_pt ngx_http_next_body_filter, ngx_http_instaweb_ctx_t *ctx) :
+NgxPagespeedWriter::NgxPagespeedWriter(ngx_http_request_t *request,
+                                       ngx_http_instaweb_ctx_t *ctx) :
         request(request),
-        ngx_http_next_body_filter(ngx_http_next_body_filter),
         ctx(ctx) {
     write_status = NGX_OK;
 }
@@ -39,11 +30,16 @@ bool NgxPagespeedWriter::Write(const StringPiece& str, MessageHandler* handler) 
     cdata = str.data();
     bytes_remaining = str.size();
 
+    // use the message handler instead ?
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request->connection->log, 0,
+                   "[instaweb] writer %d bytes", bytes_remaining);
+
     while (bytes_remaining) {
 
         if (ctx->out_buf == NULL
             || !ctx->out_buf->temporary // mtourne: why ?
             || ctx->out_buf->last >= ctx->out_buf->end) {
+
             if (ctx->free) {
                 cl = ctx->free;
                 ctx->free = ctx->free->next;
@@ -82,6 +78,8 @@ bool NgxPagespeedWriter::Write(const StringPiece& str, MessageHandler* handler) 
 
 
 bool NgxPagespeedWriter::Flush(MessageHandler* message_handler) {
+    ctx->out_buf->flush = 1;
+
     return true;
 }
 

@@ -23,6 +23,7 @@ PAGESPEED_INCS="\
   $PAGESPEED_ROOT/src/third_party/libpagespeed/src \
   $PAGESPEED_ROOT/src/third_party/protobuf/ \
   $PAGESPEED_ROOT/src/third_party/protobuf/src/ \
+  $PAGESPEED_ROOT/src/net/instaweb/ \
   "
 
 PAGESPEED_SRCS="\
@@ -97,11 +98,11 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
  $ngx_addon_dir/libs/net/instaweb/spriter/public/image_spriter.pb.cc \
  "
 
-
-CORE_LIBS="$CORE_LIBS -lstdc++ -Wl,-z,noexecstack -lrt"
-
-PWD=$ngx_addon_dir/libs make BUILDTYPE=$PAGESPEED_BUILDMODE -C $PAGESPEED_ROOT/src/net/instaweb/automatic exe
+OUTPUT_DIR=$ngx_addon_dir/libs
+make OUTPUT_DIR=$OUTPUT_DIR BUILDTYPE=$PAGESPEED_BUILDMODE -C $PAGESPEED_ROOT/src/net/instaweb/automatic $OUTPUT_DIR/pagespeed_automatic.a
 
 CORE_LIBS="$CORE_LIBS \
-  $ngx_addon_dir/libs/pagespeed_automatic.a
+  $ngx_addon_dir/libs/pagespeed_automatic.a \
+  -lrt -lstdc++ -Wl,-z,noexecstack -lrt \
   "
+
